@@ -1,0 +1,109 @@
+<?php
+
+namespace Longcache;
+
+use Altis\Cloud;
+use WP_Post;
+
+/**
+ * Bootstrap function to set up the plugin.
+ *
+ * @return void
+ */
+function bootstrap() : void {
+	add_action( 'template_redirect', __NAMESPACE__ . '\\set_cache_ttl' );
+	add_action( 'save_post', __NAMESPACE__ . '\\on_save_post' );
+	add_action( 'logcache.invalidate_urls', __NAMESPACE__ . '\\on_cron_invalidate_urls' );
+}
+
+/**
+ * Check if the current request should be cached.
+ *
+ * @return boolean
+ */
+function should_cache_response() : bool {
+	$should_cache = true;
+
+	if ( is_user_logged_in() ) {
+		$should_cache = false;
+	}
+
+	if ( in_array( $_SERVER['REQUEST_METHOD'], [ 'POST', 'DELETE', 'PUT' ] ) ) {
+		$should_cache = false;
+	}
+
+	if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
+		$should_cache = false;
+	}
+
+	return apply_filters( 'longcache.should_cache', $should_cache );
+}
+/**
+ * Set the cache TTL depending on the curernt global scope.
+ *
+ * @return void
+ */
+function set_cache_ttl() : void {
+	if ( ! should_cache_response() ) {
+		return;
+	}
+
+	global $batcache;
+	$max_age = absint( apply_filters( 'longcache.max-age', DAY_IN_SECONDS * 14 ) ); // 14 days by default.
+
+	header( 'Cache-Control: s-maxage=' . $max_age . ', max-age=' . $batcache->max_age . ', must-revalidate' );
+}
+
+/**
+ * Invalidate URLs on the CDN cache.
+ *
+ * @param array $urls
+ * @return void
+ */
+function invalidate_urls( array $urls ) : void {
+	if ( ! $urls ) {
+		return;
+	}
+	wp_schedule_single_event( time() + 5, 'logcache.invalidate_urls', [ $urls ] );
+}
+
+/**
+ * Callback function for the deferred invalidat urls cron.
+ *
+ * @param array $urls
+ * @return void
+ */
+function on_cron_invalidate_urls( array $urls ) : void {
+	Cloud\purge_cdn_paths( $urls );
+}
+
+/**
+ * Invalidate URLs when a post is saved.
+ *
+ * @param integer $post_id
+ * @param WP_Post $post
+ * @return void
+ */
+function on_save_post( int $post_id, WP_Post $post ) : void {
+	if ( $post->post_status !== 'publish' ) {
+		return;
+	}
+
+	invalidate_urls( get_urls_to_invalidate_for_post( $post_id ) );
+}
+
+/**
+ * Get the URLs for a given post id.
+ *
+ * @param integer $post_id
+ * @return string[]
+ */
+function get_urls_to_invalidate_for_post( int $post_id ) : array {
+	$urls = [
+		get_permalink( $post_id ),
+	];
+
+	$urls = apply_filters( 'longcache.urls_to_invalidate_for_post', $urls, $post_id );
+
+	return $urls;
+}
