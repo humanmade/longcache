@@ -1,0 +1,13 @@
+{
+    "name": "humanmade/longcache",
+    "description": "Cache WordPress responses for a long time",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Joe Hoyle",
+            "email": "joehoyle@gmail.com"
+        }
+    ],
+    "require": {}
+}
