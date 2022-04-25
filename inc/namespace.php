@@ -13,12 +13,12 @@ use WP_Post;
  * @return void
  */
 function bootstrap() : void {
-	define( 'CLOUDFRONT_DISTRIBUTION_ID', 'E2V9ST9150ACMY' );
 	add_action( 'template_redirect', __NAMESPACE__ . '\\set_cache_ttl' );
 	add_action( 'save_post', __NAMESPACE__ . '\\on_save_post', 10, 2 );
 	add_action( 'logcache.invalidate_urls', __NAMESPACE__ . '\\on_cron_invalidate_urls' );
 
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		require_once __DIR__ . '/class-cli-command.php';
 		WP_CLI::add_command( 'longcache', __NAMESPACE__ . '\\CLI_Command' );
 	}
 }
