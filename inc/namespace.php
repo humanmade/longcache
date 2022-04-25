@@ -3,6 +3,8 @@
 namespace Longcache;
 
 use Altis\Cloud;
+use Exception;
+use WP_CLI;
 use WP_Post;
 
 /**
@@ -11,9 +13,14 @@ use WP_Post;
  * @return void
  */
 function bootstrap() : void {
+	define( 'CLOUDFRONT_DISTRIBUTION_ID', 'E2V9ST9150ACMY' );
 	add_action( 'template_redirect', __NAMESPACE__ . '\\set_cache_ttl' );
-	add_action( 'save_post', __NAMESPACE__ . '\\on_save_post' );
+	add_action( 'save_post', __NAMESPACE__ . '\\on_save_post', 10, 2 );
 	add_action( 'logcache.invalidate_urls', __NAMESPACE__ . '\\on_cron_invalidate_urls' );
+
+	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		WP_CLI::add_command( 'longcache', __NAMESPACE__ . '\\CLI_Command' );
+	}
 }
 
 /**
@@ -58,9 +65,46 @@ function set_cache_ttl() : void {
  * Invalidate URLs on the CDN cache.
  *
  * @param array $urls
+ * @return bool
+ */
+function invalidate_urls( array $urls ) : bool {
+	if ( ! $urls ) {
+		return true;
+	}
+
+	$urls = array_map( function ( string $url ) : string {
+		$parts = parse_url( $url );
+		$path = $parts['path'] ?? '/';
+
+		$url = $path;
+		if ( isset( $parts['query'] ) ) {
+			$url .= '?' . $parts['query'];
+		}
+		return $url;
+	}, $urls );
+
+	try {
+		$result = Cloud\purge_cdn_paths( $urls );
+	} catch ( Exception $e ) {
+		foreach ( $urls as $url ) {
+			Log\insert_entry( $url, 'failed', $e->getMessage() );
+		}
+		return false;
+	}
+
+	foreach ( $urls as $url ) {
+		Log\insert_entry( $url, $result ? 'succeeded' : 'failed' );
+	}
+	return $result;
+}
+
+/**
+ * Invalidate URLs on the CDN cache.
+ *
+ * @param array $urls
  * @return void
  */
-function invalidate_urls( array $urls ) : void {
+function queue_invalidate_urls( array $urls ) : void {
 	if ( ! $urls ) {
 		return;
 	}
@@ -74,7 +118,7 @@ function invalidate_urls( array $urls ) : void {
  * @return void
  */
 function on_cron_invalidate_urls( array $urls ) : void {
-	Cloud\purge_cdn_paths( $urls );
+	invalidate_urls( $urls );
 }
 
 /**
@@ -89,7 +133,7 @@ function on_save_post( int $post_id, WP_Post $post ) : void {
 		return;
 	}
 
-	invalidate_urls( get_urls_to_invalidate_for_post( $post_id ) );
+	queue_invalidate_urls( get_urls_to_invalidate_for_post( $post_id ) );
 }
 
 /**

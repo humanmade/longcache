@@ -3,7 +3,7 @@
 namespace Longcache\Admin;
 
 use Altis\Cloud;
-use Exception;
+use Longcache;
 
 const MENU_SLUG = 'longcache';
 
@@ -15,6 +15,9 @@ const MENU_SLUG = 'longcache';
 function bootstrap() : void {
 	add_action( 'admin_menu', __NAMESPACE__ . '\\register_admin_page' );
 	add_action( 'admin_init', __NAMESPACE__ . '\\check_on_invalidate_urls_submit' );
+
+	require_once ABSPATH . '/wp-admin/includes/class-wp-list-table.php';
+	require_once __DIR__ . '/class-log-list-table.php';
 }
 
 
@@ -38,12 +41,10 @@ function render_settings_page() : void {
 			<?php
 			settings_fields( 'longcache' );
 			do_settings_sections( 'longcache' );
-			// output save settings button
-			// submit_button( __( 'Save Changes', 'longcache' ) );
 			?>
 		</form>
 
-		<h1><?php _( 'Invalidate URLs', 'longcache' ) ?></h1>
+		<h1><?php echo __( 'Invalidate URLs', 'longcache' ) ?></h1>
 		<form method="post">
 			<label>
 				URLs to invalidate (one per line.)
@@ -57,6 +58,13 @@ function render_settings_page() : void {
 			submit_button( __( 'Invalidate', 'longcache' ) );
 			?>
 		</form>
+
+		<h1>Log</h1>
+		<?php
+		$list_table = new Log_List_Table;
+		$list_table->prepare_items();
+		$list_table->display();
+		?>
 	</div>
 	<?php
 }
@@ -70,11 +78,7 @@ function check_on_invalidate_urls_submit() {
 	if ( isset( $_POST['longcache_urls'] ) && check_admin_referer( 'longcache.invalidate-urls' ) ) {
 		$urls = array_filter( array_map( 'sanitize_text_field', array_map( 'trim', explode( "\n", $_POST['longcache_urls'] ) ) ) );
 
-		try {
-			$result = Cloud\purge_cdn_paths( $urls );
-		} catch ( Exception $e ) {
-			$result = false;
-		}
+		$result = Longcache\invalidate_urls( $urls );
 
 		if ( $result === true ) {
 			add_settings_error( 'logcache', 'invalidated', __( 'Invalidate request successful.'), 'success' );
