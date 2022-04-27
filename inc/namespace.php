@@ -57,8 +57,11 @@ function set_cache_ttl() : void {
 
 	global $batcache;
 	$max_age = absint( apply_filters( 'longcache.max-age', DAY_IN_SECONDS * 14 ) ); // 14 days by default.
-
-	header( 'Cache-Control: s-maxage=' . $max_age . ', max-age=' . $batcache->max_age . ', must-revalidate' );
+	if ( ! $batcache || ! is_object( $batcache ) ) {
+		header( 'Cache-Control: s-maxage=' . $max_age . ', must-revalidate' );
+	} else {
+		header( 'Cache-Control: s-maxage=' . $max_age . ', max-age=' . $batcache->max_age . ', must-revalidate' );
+	}
 }
 
 /**
@@ -71,6 +74,9 @@ function invalidate_urls( array $urls ) : bool {
 	if ( ! $urls ) {
 		return true;
 	}
+
+	// Delete the URLs from Batcache (they need the full URL).
+	array_map( __NAMESPACE__ . '\\batcache_clear_url', $urls );
 
 	$urls = array_map( function ( string $url ) : string {
 		$parts = parse_url( $url );
@@ -96,6 +102,40 @@ function invalidate_urls( array $urls ) : bool {
 		Log\insert_entry( $url, $result ? 'succeeded' : 'failed' );
 	}
 	return $result;
+}
+
+/**
+ * Clear cache for a given URL from Batcache
+ *
+ * This is taken from the batcache plugin.
+ *
+ * @param string $url
+ * @return void
+ */
+function batcache_clear_url( string $url ) : void {
+	if ( empty( $url ) ) {
+		return;
+	}
+
+
+	// Remove all query params.
+	$url = strtok( $url, '?' );
+
+	if ( 0 === strpos( $url, 'https://' ) ) {
+		$url = str_replace( 'https://', 'http://', $url );
+	}
+
+	if ( 0 !== strpos( $url, 'http://' ) ) {
+		$url = 'http://' . $url;
+	}
+
+	$url_key = md5( $url );
+
+	// Make sure batcache is set up as a global group.
+	wp_cache_add_global_groups( 'batcache' );
+
+	wp_cache_add( "{$url_key}_version", 0, 'batcache' );
+	wp_cache_incr( "{$url_key}_version", 1, 'batcache' );
 }
 
 /**
