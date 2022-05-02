@@ -10,6 +10,7 @@ namespace Longcache\Log;
 function bootstrap() : void {
 	if ( ! wp_cache_get( 'longcache.table_created' ) ) {
 		create_table();
+		wp_cache_set( 'longcache.table_created', true );
 	}
 
 	if ( ! wp_next_scheduled( 'longcache.log.truncate' ) ) {
