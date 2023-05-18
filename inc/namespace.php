@@ -15,6 +15,7 @@ use WP_Post;
 function bootstrap() : void {
 	add_action( 'template_redirect', __NAMESPACE__ . '\\set_cache_ttl' );
 	add_action( 'save_post', __NAMESPACE__ . '\\on_save_post', 10, 2 );
+	add_action( 'delete_post', __NAMESPACE__ . '\\on_delete_post', 10, 2 );
 	add_action( 'logcache.invalidate_urls', __NAMESPACE__ . '\\on_cron_invalidate_urls' );
 
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {
@@ -169,10 +170,18 @@ function on_cron_invalidate_urls( array $urls ) : void {
  * @return void
  */
 function on_save_post( int $post_id, WP_Post $post ) : void {
-	if ( $post->post_status !== 'publish' ) {
-		return;
-	}
+	queue_invalidate_urls( get_urls_to_invalidate_for_post( $post_id ) );
+}
 
+/**
+ * Flush cache whenever a post is deleted.
+ *
+ * @param [type] $new_status
+ * @param [type] $old_status
+ * @param [type] $post
+ * @return void
+ */
+function trash_post( int $post_id, WP_Post $post ) : void {
 	queue_invalidate_urls( get_urls_to_invalidate_for_post( $post_id ) );
 }
 
