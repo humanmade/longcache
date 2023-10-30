@@ -14,7 +14,7 @@ use WP_Post;
  */
 function bootstrap() : void {
 	add_action( 'template_redirect', __NAMESPACE__ . '\\set_cache_ttl' );
-	add_action( 'save_post', __NAMESPACE__ . '\\on_save_post', 10, 2 );
+	add_action( 'transition_post_status', __NAMESPACE__ . '\\on_transition_post_status', 10, 3 );
 	add_action( 'logcache.invalidate_urls', __NAMESPACE__ . '\\on_cron_invalidate_urls' );
 
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {
@@ -162,18 +162,22 @@ function on_cron_invalidate_urls( array $urls ) : void {
 }
 
 /**
- * Invalidate URLs when a post is saved.
+ * Invalidate URLs when a post is updated.
  *
- * @param integer $post_id
+ * @param string $new_status New post status.
+ * @param string $old_status Old post status.
  * @param WP_Post $post
  * @return void
  */
-function on_save_post( int $post_id, WP_Post $post ) : void {
-	if ( $post->post_status !== 'publish' ) {
+function on_transition_post_status( string $new_status, string $old_status, WP_Post $post ) : void {
+	// Invalidate post URLS whenever an already published post is updated.
+	// This ensures updates as well as delete/trash and any other status change are accounted for.
+	if ( $old_status !== 'publish' ) {
 		return;
 	}
 
-	queue_invalidate_urls( get_urls_to_invalidate_for_post( $post_id ) );
+
+	queue_invalidate_urls( get_urls_to_invalidate_for_post( $post->ID ) );
 }
 
 /**
