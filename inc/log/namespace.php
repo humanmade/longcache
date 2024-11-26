@@ -37,7 +37,7 @@ function create_table() : void {
 		`status` varchar(50) NOT NULL,
 		`data` longtext,
 		PRIMARY KEY (`id`)
-	) ENGINE=InnoDB DEFAULT CHARSET={$charset_collate};\n";
+	) ENGINE=InnoDB {$charset_collate};\n";
 
 	$result = $wpdb->query( $query );
 }
